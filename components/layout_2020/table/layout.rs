@@ -38,18 +38,21 @@ use crate::geom::{
 };
 use crate::positioned::{relative_adjustement, PositioningContext, PositioningContextLength};
 use crate::sizing::{ComputeInlineContentSizes, ContentSizes, InlineContentSizesResult};
-use crate::style_ext::{BorderStyleColor, Clamp, ComputedValuesExt, PaddingBorderMargin};
+use crate::style_ext::{
+    BorderStyleColor, Clamp, ComputedValuesExt, LayoutStyle, PaddingBorderMargin,
+};
 use crate::table::{SpecificTableOrTableCellInfo, TableSlotCoordinates};
 use crate::{
     ConstraintSpace, ContainingBlock, ContainingBlockSize, IndefiniteContainingBlock, WritingMode,
 };
 
 fn detailed_layout_info(
-    border_style_color: Option<PhysicalSides<BorderStyleColor>>,
+    border_style_color: Option<LogicalSides<BorderStyleColor>>,
+    writing_mode: WritingMode,
 ) -> Option<SpecificLayoutInfo> {
     Some(SpecificLayoutInfo::TableOrTableCell(Box::new(
         SpecificTableOrTableCellInfo {
-            border_style_color: border_style_color?,
+            border_style_color: border_style_color?.to_physical(writing_mode),
         },
     )))
 }
@@ -120,9 +123,12 @@ impl CollapsedBorder {
         Self { style_color, width }
     }
 
-    fn from_style(style: &ComputedValues, writing_mode: WritingMode) -> LogicalSides<Self> {
-        let border_style_color = style.border_style_color(writing_mode);
-        let border_width = style.border_width(writing_mode);
+    fn from_layout_style(
+        layout_style: &LayoutStyle,
+        writing_mode: WritingMode,
+    ) -> LogicalSides<Self> {
+        let border_style_color = layout_style.style().border_style_color(writing_mode);
+        let border_width = layout_style.border_width(writing_mode);
         LogicalSides {
             inline_start: Self::new(border_style_color.inline_start, border_width.inline_start),
             inline_end: Self::new(border_style_color.inline_end, border_width.inline_end),
@@ -131,9 +137,9 @@ impl CollapsedBorder {
         }
     }
 
-    fn max_assign(&mut self, other: Self) {
-        if *self < other {
-            *self = other;
+    fn max_assign(&mut self, other: &Self) {
+        if *self < *other {
+            *self = other.clone();
         }
     }
 }
@@ -172,12 +178,24 @@ impl PartialOrd for CollapsedBorder {
 
 impl Eq for CollapsedBorder {}
 
-/// The calculated collapsed borders.
+/// Represents a piecewise sequence of collapsed borders along a line.
 #[derive(Clone, Debug, Default)]
-struct CollapsedBorders {
-    block: Vec<CollapsedBorder>,
-    inline: Vec<CollapsedBorder>,
+struct CollapsedBorderLine {
+    max_width: Au,
+    list: Vec<CollapsedBorder>,
 }
+
+impl CollapsedBorderLine {
+    fn max_assign(&mut self, collapsed_border: &CollapsedBorder, range: &Range<usize>) {
+        self.max_width.max_assign(collapsed_border.width);
+        for index in range.clone() {
+            self.list[index].max_assign(collapsed_border)
+        }
+    }
+}
+
+/// The calculated collapsed borders.
+type CollapsedBorders = LogicalVec2<Vec<CollapsedBorderLine>>;
 
 /// A helper struct that performs the layout of the box tree version
 /// of a table into the fragment tree version. This implements
@@ -272,21 +290,18 @@ impl<'a> TableLayout<'a> {
                     _ => continue,
                 };
 
-                let padding = cell
-                    .base
-                    .style
+                let layout_style = cell.layout_style();
+                let padding = layout_style
                     .padding(writing_mode)
                     .percentages_relative_to(Au::zero());
-
                 let border = self
-                    .get_collapsed_borders_for_cell(
-                        cell,
-                        TableSlotCoordinates::new(column_index, row_index),
-                    )
-                    .map_or_else(
-                        || cell.base.style.border_width(writing_mode),
-                        |(border, _)| border,
-                    );
+                    .get_collapsed_border_widths_for_area(LogicalSides {
+                        inline_start: column_index,
+                        inline_end: column_index + cell.colspan,
+                        block_start: row_index,
+                        block_end: row_index + cell.rowspan,
+                    })
+                    .unwrap_or_else(|| layout_style.border_width(writing_mode));
 
                 let padding_border_sums = LogicalVec2 {
                     inline: padding.inline_sum() + border.inline_sum(),
@@ -1195,25 +1210,24 @@ impl<'a> TableLayout<'a> {
                             return None;
                         };
 
-                        let coordinates = TableSlotCoordinates::new(column_index, row_index);
-                        let (border, detailed_layout_info) =
-                            match self.get_collapsed_borders_for_cell(cell, coordinates) {
-                                Some((border_width, border_style_color)) => {
-                                    let border_style_color = border_style_color
-                                        .to_physical(self.table.style.writing_mode);
-                                    (border_width, detailed_layout_info(Some(border_style_color)))
-                                },
-                                None => (
-                                    cell.base.style.border_width(
-                                        containing_block_for_table.style.writing_mode,
-                                    ),
-                                    None,
-                                ),
-                            };
-
-                        let padding: LogicalSides<Au> = cell
-                            .base
-                            .style
+                        let area = LogicalSides {
+                            inline_start: column_index,
+                            inline_end: column_index + cell.colspan,
+                            block_start: row_index,
+                            block_end: row_index + cell.rowspan,
+                        };
+                        let detailed_layout_info = detailed_layout_info(
+                            self.get_collapsed_border_style_colors_for_area(area),
+                            self.table.style.writing_mode,
+                        );
+                        let layout_style = cell.layout_style();
+                        let border = self
+                            .get_collapsed_border_widths_for_area(area)
+                            .unwrap_or_else(|| {
+                                layout_style
+                                    .border_width(containing_block_for_table.style.writing_mode)
+                            });
+                        let padding: LogicalSides<Au> = layout_style
                             .padding(containing_block_for_table.style.writing_mode)
                             .percentages_relative_to(self.basis_for_cell_padding_percentage);
                         let inline_border_padding_sum = border.inline_sum() + padding.inline_sum();
@@ -1638,9 +1652,8 @@ impl<'a> TableLayout<'a> {
         containing_block_for_table: &ContainingBlock,
     ) -> IndependentLayout {
         let table_writing_mode = containing_block_for_children.style.writing_mode;
-        self.pbm = self
-            .table
-            .style
+        let layout_style = self.table.layout_style();
+        self.pbm = layout_style
             .padding_border_margin_with_writing_mode_and_containing_block_inline_size(
                 table_writing_mode,
                 containing_block_for_table.size.inline,
@@ -1677,9 +1690,7 @@ impl<'a> TableLayout<'a> {
         let offset_from_wrapper = -self.pbm.padding - self.pbm.border;
         let mut current_block_offset = offset_from_wrapper.block_start;
 
-        let depends_on_block_constraints = self
-            .table
-            .style
+        let depends_on_block_constraints = layout_style
             .content_box_sizes_and_padding_border_margin(&containing_block_for_table.into())
             .depends_on_block_constraints;
 
@@ -1861,20 +1872,13 @@ impl<'a> TableLayout<'a> {
         assert_eq!(self.table.size.height, self.row_sizes.len());
         assert_eq!(self.table.size.width, self.distributed_column_widths.len());
 
-        let border_style_color = self.collapsed_borders.as_ref().map(|collapsed_borders| {
-            LogicalSides {
-                inline_start: collapsed_borders.inline[0].style_color.clone(),
-                inline_end: collapsed_borders.inline[self.table.size.width]
-                    .style_color
-                    .clone(),
-                block_start: collapsed_borders.block[0].style_color.clone(),
-                block_end: collapsed_borders.block[self.table.size.height]
-                    .style_color
-                    .clone(),
-            }
-            .to_physical(table_writing_mode)
+        let border_style_color = self.get_collapsed_border_style_colors_for_area(LogicalSides {
+            inline_start: 0,
+            inline_end: self.table.size.width,
+            block_start: 0,
+            block_end: self.table.size.height,
         });
-        let detailed_layout_info = detailed_layout_info(border_style_color);
+        let detailed_layout_info = detailed_layout_info(border_style_color, table_writing_mode);
 
         if self.table.size.width == 0 && self.table.size.height == 0 {
             let content_rect = LogicalRect {
@@ -2211,32 +2215,60 @@ impl<'a> TableLayout<'a> {
         }
 
         let mut collapsed_borders = CollapsedBorders {
-            block: vec![Default::default(); self.table.size.height + 1],
-            inline: vec![Default::default(); self.table.size.width + 1],
+            block: vec![
+                CollapsedBorderLine {
+                    max_width: Au::zero(),
+                    list: vec![Default::default(); self.table.size.width],
+                };
+                self.table.size.height + 1
+            ],
+            inline: vec![
+                CollapsedBorderLine {
+                    max_width: Au::zero(),
+                    list: vec![Default::default(); self.table.size.height],
+                };
+                self.table.size.width + 1
+            ],
         };
 
         let mut apply_border =
-            |style: &ComputedValues, block: &Range<usize>, inline: &Range<usize>| {
-                let border = CollapsedBorder::from_style(style, writing_mode);
-                collapsed_borders.block[block.start].max_assign(border.block_start);
-                collapsed_borders.block[block.end].max_assign(border.block_end);
-                collapsed_borders.inline[inline.start].max_assign(border.inline_start);
-                collapsed_borders.inline[inline.end].max_assign(border.inline_end);
+            |layout_style: &LayoutStyle, block: &Range<usize>, inline: &Range<usize>| {
+                let border = CollapsedBorder::from_layout_style(layout_style, writing_mode);
+                collapsed_borders.block[block.start].max_assign(&border.block_start, inline);
+                collapsed_borders.block[block.end].max_assign(&border.block_end, inline);
+                collapsed_borders.inline[inline.start].max_assign(&border.inline_start, block);
+                collapsed_borders.inline[inline.end].max_assign(&border.inline_end, block);
             };
         let all_rows = 0..self.table.size.height;
         let all_columns = 0..self.table.size.width;
-        apply_border(&self.table.grid_style, &all_rows, &all_columns);
+        apply_border(&self.table.layout_style_for_grid(), &all_rows, &all_columns);
         for column_group in &self.table.column_groups {
-            apply_border(&column_group.style, &all_rows, &column_group.track_range);
+            apply_border(
+                &column_group.layout_style(),
+                &all_rows,
+                &column_group.track_range,
+            );
         }
         for (column_index, column) in self.table.columns.iter().enumerate() {
-            apply_border(&column.style, &all_rows, &(column_index..column_index + 1));
+            apply_border(
+                &column.layout_style(),
+                &all_rows,
+                &(column_index..column_index + 1),
+            );
         }
         for row_group in &self.table.row_groups {
-            apply_border(&row_group.style, &row_group.track_range, &all_columns);
+            apply_border(
+                &row_group.layout_style(),
+                &row_group.track_range,
+                &all_columns,
+            );
         }
         for (row_index, row) in self.table.rows.iter().enumerate() {
-            apply_border(&row.style, &(row_index..row_index + 1), &all_columns);
+            apply_border(
+                &row.layout_style(),
+                &(row_index..row_index + 1),
+                &all_columns,
+            );
         }
         for row_index in 0..self.table.size.height {
             for column_index in 0..self.table.size.width {
@@ -2246,7 +2278,7 @@ impl<'a> TableLayout<'a> {
                 };
 
                 apply_border(
-                    &cell.base.style,
+                    &cell.layout_style(),
                     &(row_index..row_index + cell.rowspan),
                     &(column_index..column_index + cell.colspan),
                 );
@@ -2256,47 +2288,61 @@ impl<'a> TableLayout<'a> {
         self.collapsed_borders = Some(collapsed_borders);
     }
 
-    fn get_collapsed_borders_for_cell(
+    fn get_collapsed_border_widths_for_area(
         &self,
-        cell: &TableSlotCell,
-        coordinates: TableSlotCoordinates,
-    ) -> Option<(LogicalSides<Au>, LogicalSides<BorderStyleColor>)> {
+        area: LogicalSides<usize>,
+    ) -> Option<LogicalSides<Au>> {
         let collapsed_borders = self.collapsed_borders.as_ref()?;
-        let end_x = coordinates.x + cell.colspan;
-        let end_y = coordinates.y + cell.rowspan;
-        let inline_start = &collapsed_borders.inline[coordinates.x];
-        let inline_end = &collapsed_borders.inline[end_x];
-        let block_start = &collapsed_borders.block[coordinates.y];
-        let block_end = &collapsed_borders.block[end_y];
-        let border_width = LogicalSides {
-            inline_start: if coordinates.x == 0 {
-                inline_start.width - self.pbm.border.inline_start
+        let inline_start = &collapsed_borders.inline[area.inline_start];
+        let inline_end = &collapsed_borders.inline[area.inline_end];
+        let block_start = &collapsed_borders.block[area.block_start];
+        let block_end = &collapsed_borders.block[area.block_end];
+        Some(LogicalSides {
+            inline_start: if area.inline_start == 0 {
+                inline_start.max_width - self.pbm.border.inline_start
             } else {
-                inline_start.width / 2
+                inline_start.max_width / 2
             },
-            inline_end: if end_x == self.table.size.width {
-                inline_end.width - self.pbm.border.inline_end
+            inline_end: if area.inline_end == self.table.size.width {
+                inline_end.max_width - self.pbm.border.inline_end
             } else {
-                inline_end.width / 2
+                inline_end.max_width / 2
             },
-            block_start: if coordinates.y == 0 {
-                block_start.width - self.pbm.border.block_start
+            block_start: if area.block_start == 0 {
+                block_start.max_width - self.pbm.border.block_start
             } else {
-                block_start.width / 2
+                block_start.max_width / 2
             },
-            block_end: if end_y == self.table.size.height {
-                block_end.width - self.pbm.border.block_end
+            block_end: if area.block_end == self.table.size.height {
+                block_end.max_width - self.pbm.border.block_end
             } else {
-                block_end.width / 2
+                block_end.max_width / 2
             },
-        };
-        let border_style_color = LogicalSides {
-            inline_start: inline_start.style_color.clone(),
-            inline_end: inline_end.style_color.clone(),
-            block_start: block_start.style_color.clone(),
-            block_end: block_end.style_color.clone(),
-        };
-        Some((border_width, border_style_color))
+        })
+    }
+
+    fn get_collapsed_border_style_colors_for_area(
+        &self,
+        area: LogicalSides<usize>,
+    ) -> Option<LogicalSides<BorderStyleColor>> {
+        let collapsed_borders = self.collapsed_borders.as_ref()?;
+        if self.table.size.width == 0 || self.table.size.height == 0 {
+            return Some(LogicalSides::default());
+        }
+        let inline_start = &collapsed_borders.inline[area.inline_start];
+        let inline_end = &collapsed_borders.inline[area.inline_end];
+        let block_start = &collapsed_borders.block[area.block_start];
+        let block_end = &collapsed_borders.block[area.block_end];
+
+        // This area may span multiple rows and columns, each of which can have different
+        // collapsed borders. However, we don't have support for one side of a box to have
+        // a piecewise border. Therefore, we just pick the first piece for the entire side.
+        Some(LogicalSides {
+            inline_start: inline_start.list[area.block_start].style_color.clone(),
+            inline_end: inline_end.list[area.block_start].style_color.clone(),
+            block_start: block_start.list[area.inline_start].style_color.clone(),
+            block_end: block_end.list[area.inline_start].style_color.clone(),
+        })
     }
 }
 
@@ -2720,9 +2766,9 @@ impl ComputeInlineContentSizes for Table {
         constraint_space: &ConstraintSpace,
     ) -> InlineContentSizesResult {
         let writing_mode = constraint_space.writing_mode;
+        let layout_style = self.layout_style();
         let mut layout = TableLayout::new(self);
-        layout.pbm = self
-            .style
+        layout.pbm = layout_style
             .padding_border_margin_with_writing_mode_and_containing_block_inline_size(
                 writing_mode,
                 Au::zero(),
@@ -2737,11 +2783,10 @@ impl ComputeInlineContentSizes for Table {
             // Padding and border should apply to the table grid, but they will be taken into
             // account when computing the inline content sizes of the table wrapper (our parent), so
             // this code removes their contribution from the inline content size of the caption.
-            let padding = self
-                .style
+            let padding = layout_style
                 .padding(writing_mode)
                 .percentages_relative_to(Au::zero());
-            let border = self.style.border_width(writing_mode);
+            let border = layout_style.border_width(writing_mode);
             caption_minimum_inline_size -= padding.inline_sum() + border.inline_sum();
             table_content_sizes
                 .min_content
@@ -2758,7 +2803,38 @@ impl ComputeInlineContentSizes for Table {
     }
 }
 
+impl Table {
+    #[inline]
+    pub(crate) fn layout_style(&self) -> LayoutStyle {
+        LayoutStyle::Table(&self.style)
+    }
+
+    #[inline]
+    pub(crate) fn layout_style_for_grid(&self) -> LayoutStyle {
+        LayoutStyle::Default(&self.grid_style)
+    }
+}
+
+impl TableTrack {
+    #[inline]
+    pub(crate) fn layout_style(&self) -> LayoutStyle {
+        LayoutStyle::Default(&self.style)
+    }
+}
+
+impl TableTrackGroup {
+    #[inline]
+    pub(crate) fn layout_style(&self) -> LayoutStyle {
+        LayoutStyle::Default(&self.style)
+    }
+}
+
 impl TableSlotCell {
+    #[inline]
+    fn layout_style(&self) -> LayoutStyle {
+        self.contents.layout_style(&self.base)
+    }
+
     fn effective_vertical_align(&self) -> VerticalAlignKeyword {
         match self.base.style.clone_vertical_align() {
             VerticalAlign::Keyword(VerticalAlignKeyword::Top) => VerticalAlignKeyword::Top,

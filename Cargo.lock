@@ -1670,9 +1670,9 @@ dependencies = [
 
 [[package]]
 name = "data-encoding"
-version = "2.6.0"
+version = "2.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e8566979429cf69b49a5c740c60791108e86440e8be149bbea4fe54d2c32d6e2"
+checksum = "0e60eed09d8c01d3cee5b7d30acb059b76614c918fa0f992e0dd6eeb10daad6f"
 
 [[package]]
 name = "data-url"
@@ -2133,12 +2133,16 @@ dependencies = [
  "base",
  "cfg-if",
  "crossbeam-channel",
+ "http 1.2.0",
+ "hyper_serde",
  "ipc-channel",
  "keyboard-types",
  "log",
+ "malloc_size_of_derive",
  "num-derive",
  "num-traits",
  "serde",
+ "servo_malloc_size_of",
  "servo_url",
  "webrender_api",
  "webxr-api",
@@ -5014,8 +5018,9 @@ dependencies = [
 
 [[package]]
 name = "metal"
-version = "0.30.0"
-source = "git+https://github.com/gfx-rs/metal-rs.git?rev=ef768ff9d7#ef768ff9d742ae6a0f4e83ddc8031264e7d460c4"
+version = "0.31.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f569fb946490b5743ad69813cb19629130ce9374034abe31614a36402d18f99e"
 dependencies = [
  "bitflags 2.8.0",
  "block",
@@ -5158,27 +5163,6 @@ checksum = "956787520e75e9bd233246045d19f42fb73242759cc57fba9611d940ae96d4b0"
 
 [[package]]
 name = "naga"
-version = "23.0.0"
-source = "git+https://github.com/gfx-rs/wgpu?rev=dc9b2eb71807ccafb7414425f1f8f24b5691685d#dc9b2eb71807ccafb7414425f1f8f24b5691685d"
-dependencies = [
- "arrayvec",
- "bit-set",
- "bitflags 2.8.0",
- "cfg_aliases 0.2.1",
- "codespan-reporting",
- "hexf-parse",
- "indexmap",
- "log",
- "rustc-hash 1.1.0",
- "spirv",
- "strum",
- "termcolor",
- "thiserror 2.0.9",
- "unicode-xid",
-]
-
-[[package]]
-name = "naga"
 version = "23.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "364f94bc34f61332abebe8cad6f6cd82a5b65cff22c828d05d0968911462ca4f"
@@ -5195,6 +5179,27 @@ dependencies = [
  "spirv",
  "termcolor",
  "thiserror 1.0.69",
+ "unicode-xid",
+]
+
+[[package]]
+name = "naga"
+version = "24.0.0"
+source = "git+https://github.com/gfx-rs/wgpu?rev=779261e64daa6cf76c826532b7a1561d8ec203fd#779261e64daa6cf76c826532b7a1561d8ec203fd"
+dependencies = [
+ "arrayvec",
+ "bit-set",
+ "bitflags 2.8.0",
+ "cfg_aliases 0.2.1",
+ "codespan-reporting",
+ "hexf-parse",
+ "indexmap",
+ "log",
+ "rustc-hash 1.1.0",
+ "spirv",
+ "strum",
+ "termcolor",
+ "thiserror 2.0.9",
  "unicode-xid",
 ]
 
@@ -9065,8 +9070,8 @@ dependencies = [
  "webrender",
  "webrender_api",
  "webrender_traits",
- "wgpu-core 23.0.1 (git+https://github.com/gfx-rs/wgpu?rev=dc9b2eb71807ccafb7414425f1f8f24b5691685d)",
- "wgpu-types 23.0.0 (git+https://github.com/gfx-rs/wgpu?rev=dc9b2eb71807ccafb7414425f1f8f24b5691685d)",
+ "wgpu-core 24.0.0",
+ "wgpu-types 24.0.0",
 ]
 
 [[package]]
@@ -9211,9 +9216,9 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
- "wgpu-core 23.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "wgpu-hal 23.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "wgpu-types 23.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wgpu-core 23.0.1",
+ "wgpu-hal 23.0.1",
+ "wgpu-types 23.0.0",
 ]
 
 [[package]]
@@ -9237,14 +9242,14 @@ dependencies = [
  "rustc-hash 1.1.0",
  "smallvec",
  "thiserror 1.0.69",
- "wgpu-hal 23.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "wgpu-types 23.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wgpu-hal 23.0.1",
+ "wgpu-types 23.0.0",
 ]
 
 [[package]]
 name = "wgpu-core"
-version = "23.0.1"
-source = "git+https://github.com/gfx-rs/wgpu?rev=dc9b2eb71807ccafb7414425f1f8f24b5691685d#dc9b2eb71807ccafb7414425f1f8f24b5691685d"
+version = "24.0.0"
+source = "git+https://github.com/gfx-rs/wgpu?rev=779261e64daa6cf76c826532b7a1561d8ec203fd#779261e64daa6cf76c826532b7a1561d8ec203fd"
 dependencies = [
  "arrayvec",
  "bit-vec",
@@ -9253,7 +9258,7 @@ dependencies = [
  "document-features",
  "indexmap",
  "log",
- "naga 23.0.0",
+ "naga 24.0.0",
  "once_cell",
  "parking_lot",
  "profiling",
@@ -9261,8 +9266,8 @@ dependencies = [
  "serde",
  "smallvec",
  "thiserror 2.0.9",
- "wgpu-hal 23.0.1 (git+https://github.com/gfx-rs/wgpu?rev=dc9b2eb71807ccafb7414425f1f8f24b5691685d)",
- "wgpu-types 23.0.0 (git+https://github.com/gfx-rs/wgpu?rev=dc9b2eb71807ccafb7414425f1f8f24b5691685d)",
+ "wgpu-hal 24.0.0",
+ "wgpu-types 24.0.0",
 ]
 
 [[package]]
@@ -9301,14 +9306,14 @@ dependencies = [
  "thiserror 1.0.69",
  "wasm-bindgen",
  "web-sys",
- "wgpu-types 23.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wgpu-types 23.0.0",
  "windows 0.58.0",
 ]
 
 [[package]]
 name = "wgpu-hal"
-version = "23.0.1"
-source = "git+https://github.com/gfx-rs/wgpu?rev=dc9b2eb71807ccafb7414425f1f8f24b5691685d#dc9b2eb71807ccafb7414425f1f8f24b5691685d"
+version = "24.0.0"
+source = "git+https://github.com/gfx-rs/wgpu?rev=779261e64daa6cf76c826532b7a1561d8ec203fd#779261e64daa6cf76c826532b7a1561d8ec203fd"
 dependencies = [
  "android_system_properties",
  "arrayvec",
@@ -9329,8 +9334,8 @@ dependencies = [
  "libc",
  "libloading",
  "log",
- "metal 0.30.0",
- "naga 23.0.0",
+ "metal 0.31.0",
+ "naga 24.0.0",
  "ndk-sys 0.5.0+25.2.9519653",
  "objc",
  "once_cell",
@@ -9344,7 +9349,7 @@ dependencies = [
  "thiserror 2.0.9",
  "wasm-bindgen",
  "web-sys",
- "wgpu-types 23.0.0 (git+https://github.com/gfx-rs/wgpu?rev=dc9b2eb71807ccafb7414425f1f8f24b5691685d)",
+ "wgpu-types 24.0.0",
  "windows 0.58.0",
  "windows-core 0.58.0",
 ]
@@ -9362,11 +9367,12 @@ dependencies = [
 
 [[package]]
 name = "wgpu-types"
-version = "23.0.0"
-source = "git+https://github.com/gfx-rs/wgpu?rev=dc9b2eb71807ccafb7414425f1f8f24b5691685d#dc9b2eb71807ccafb7414425f1f8f24b5691685d"
+version = "24.0.0"
+source = "git+https://github.com/gfx-rs/wgpu?rev=779261e64daa6cf76c826532b7a1561d8ec203fd#779261e64daa6cf76c826532b7a1561d8ec203fd"
 dependencies = [
  "bitflags 2.8.0",
  "js-sys",
+ "log",
  "serde",
  "web-sys",
 ]
