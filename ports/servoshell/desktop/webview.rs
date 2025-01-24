@@ -12,7 +12,7 @@ use std::vec::Drain;
 use std::{env, thread};
 
 use arboard::Clipboard;
-use egui_file_dialog::{DialogState, FileDialog};
+use egui_file_dialog::FileDialog as EguiFileDialog;
 use euclid::{Point2D, Vector2D};
 use gilrs::ff::{BaseEffect, BaseEffectType, Effect, EffectBuilder, Repeat, Replay, Ticks};
 use gilrs::{EventType, Gilrs};
@@ -36,6 +36,7 @@ use servo::webrender_api::units::DeviceRect;
 use servo::webrender_api::ScrollLocation;
 use tinyfiledialogs::{self, MessageBoxIcon, OkCancel, YesNo};
 
+use super::dialog::{Dialog, FileDialog};
 use super::keyutils::{CMD_OR_ALT, CMD_OR_CONTROL};
 use super::window_trait::{WindowPortsMethods, LINE_HEIGHT};
 use crate::desktop::tracing::{trace_embedder_event, trace_embedder_msg};
@@ -89,8 +90,7 @@ pub struct WebView {
     pub url: Option<ServoUrl>,
     pub focused: bool,
     pub load_status: LoadStatus,
-    file_dialog: Option<FileDialog>,
-    file_response_sender: Option<IpcSender<Option<Vec<String>>>>,
+    dialogs: Vec<Dialog>,
 }
 
 impl WebView {
@@ -101,44 +101,26 @@ impl WebView {
             url: preload_data.url,
             focused: false,
             load_status: LoadStatus::LoadComplete,
-            file_response_sender: None,
-            file_dialog: None,
+            dialogs: vec![],
         }
     }
 
+    pub fn initialize_file_dialog(
+        &mut self,
+        multiple: bool,
+        response_sender: IpcSender<Option<Vec<String>>>,
+    ) {
+        let dialog = FileDialog {
+            dialog: EguiFileDialog::new(),
+            multiple,
+            response_sender: Some(response_sender),
+        };
+
+        self.dialogs.push(Dialog::File(dialog));
+    }
+
     pub fn update(&mut self, ctx: &egui::Context) {
-        if self.file_response_sender.is_some() {
-            if self.file_dialog.is_none() {
-                let mut file_dialog = FileDialog::new();
-                file_dialog.pick_file();
-                self.file_dialog = Some(file_dialog);
-            }
-            let state = self
-                .file_dialog
-                .as_mut()
-                .map_or(DialogState::Cancelled, |file_dialog| {
-                    file_dialog.update(ctx).state()
-                });
-
-            if let DialogState::Selected(ref path) = state {
-                if let Some(sender) = self.file_response_sender.take() {
-                    let result = if path.exists() {
-                        Some(vec![path.to_string_lossy().into()])
-                    } else {
-                        None
-                    };
-
-                    self.file_dialog = None;
-                    if let Err(e) = sender.send(result) {
-                        warn!("Failed to send file selection response: {}", e);
-                    }
-                }
-            }
-            if state == DialogState::Cancelled {
-                self.file_dialog = None;
-                self.file_response_sender = None;
-            }
-        }
+        self.dialogs.retain_mut(|dialog| dialog.update(ctx));
     }
 }
 
@@ -227,8 +209,12 @@ where
     }
 
     pub fn has_pending_file_dialog(&self) -> bool {
-        self.focused_webview()
-            .map_or(false, |webview| webview.file_response_sender.is_some())
+        self.focused_webview().map_or(false, |webview| {
+            webview
+                .dialogs
+                .iter()
+                .any(|dialog| matches!(dialog, Dialog::File(_)))
+        })
     }
 
     pub fn get_events(&mut self) -> Vec<EmbedderEvent> {
@@ -996,10 +982,10 @@ where
                             .push(EmbedderEvent::SendError(None, reason));
                     };
                 },
-                EmbedderMsg::SelectFiles(_patterns, _multiple_files, sender) => {
+                EmbedderMsg::SelectFiles(_patterns, multiple_files, sender) => {
                     if let Some(focused_webview_id) = self.focused_webview_id {
                         let focused_webview = self.get_mut(focused_webview_id).unwrap();
-                        focused_webview.file_response_sender = Some(sender);
+                        focused_webview.initialize_file_dialog(multiple_files, sender);
                         need_update = true;
                         need_present = true;
                     }
