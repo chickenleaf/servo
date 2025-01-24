@@ -5,6 +5,7 @@
 pub mod resources;
 
 use std::fmt::{Debug, Error, Formatter};
+use std::path::PathBuf;
 
 use base::id::{PipelineId, TopLevelBrowsingContextId, WebViewId};
 use crossbeam_channel::{Receiver, Sender};
@@ -220,7 +221,7 @@ pub enum EmbedderMsg {
     /// Open dialog to select bluetooth device.
     GetSelectedBluetoothDevice(Vec<String>, IpcSender<Option<String>>),
     /// Open file dialog to select files. Set boolean flag to true allows to select multiple files.
-    SelectFiles(Vec<FilterPattern>, bool, IpcSender<Option<Vec<String>>>),
+    SelectFiles(Vec<FilterPattern>, bool, IpcSender<Option<Vec<PathBuf>>>),
     /// Open interface to request permission specified by prompt.
     PromptPermission(PermissionPrompt, IpcSender<PermissionRequest>),
     /// Request to present an IME to the user when an editable element is focused.

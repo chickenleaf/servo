@@ -2,6 +2,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+use std::path::PathBuf;
+
 use egui_file_dialog::{DialogState, FileDialog as EguiFileDialog};
 use log::warn;
 use servo::ipc_channel::ipc::IpcSender;
@@ -10,7 +12,7 @@ use servo::ipc_channel::ipc::IpcSender;
 pub struct FileDialog {
     pub dialog: EguiFileDialog,
     pub multiple: bool,
-    pub response_sender: Option<IpcSender<Option<Vec<String>>>>,
+    pub response_sender: IpcSender<Option<Vec<PathBuf>>>,
 }
 
 #[derive(Debug)]
@@ -35,42 +37,31 @@ impl Dialog {
                 match state {
                     DialogState::Open => true,
                     DialogState::Selected(path) => {
-                        if let Some(sender) = dialog.response_sender.take() {
-                            let result = if path.exists() {
-                                Some(vec![path.to_string_lossy().into()])
-                            } else {
-                                None
-                            };
-                            if let Err(e) = sender.send(result) {
-                                warn!("Failed to send file selection response: {}", e);
-                            }
+                        let result = if path.exists() {
+                            Some(vec![path])
+                        } else {
+                            None
+                        };
+                        if let Err(e) = dialog.response_sender.send(result) {
+                            warn!("Failed to send file selection response: {}", e);
                         }
                         false
                     },
                     DialogState::SelectedMultiple(paths) => {
-                        if let Some(sender) = dialog.response_sender.take() {
-                            let result = if paths.iter().all(|path| path.exists()) {
-                                Some(
-                                    paths
-                                        .iter()
-                                        .map(|path| path.to_string_lossy().into())
-                                        .collect(),
-                                )
-                            } else {
-                                None
-                            };
+                        let result = if paths.iter().all(|path| path.exists()) {
+                            Some(paths)
+                        } else {
+                            None
+                        };
 
-                            if let Err(e) = sender.send(result) {
-                                warn!("Failed to send file selection response: {}", e);
-                            }
+                        if let Err(e) = dialog.response_sender.send(result) {
+                            warn!("Failed to send file selection response: {}", e);
                         }
                         false
                     },
                     DialogState::Cancelled => {
-                        if let Some(sender) = dialog.response_sender.as_ref() {
-                            if let Err(e) = sender.send(None) {
-                                warn!("Failed to send cancellation response: {}", e);
-                            }
+                        if let Err(e) = dialog.response_sender.send(None) {
+                            warn!("Failed to send cancellation response: {}", e);
                         }
                         false
                     },

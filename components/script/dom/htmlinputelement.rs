@@ -6,7 +6,9 @@ use std::borrow::Cow;
 use std::cell::Cell;
 use std::cmp::Ordering;
 use std::ops::Range;
+use std::path::PathBuf;
 use std::ptr::NonNull;
+use std::str::FromStr;
 use std::{f64, ptr};
 
 use dom_struct::dom_struct;
@@ -1901,8 +1903,12 @@ impl HTMLInputElement {
         let target = self.upcast::<EventTarget>();
 
         if self.Multiple() {
-            let opt_test_paths =
-                opt_test_paths.map(|paths| paths.iter().map(|p| p.to_string()).collect());
+            let opt_test_paths = opt_test_paths.map(|paths| {
+                paths
+                    .iter()
+                    .filter_map(|p| PathBuf::from_str(p).ok())
+                    .collect()
+            });
 
             let (chan, recv) = ipc::channel(self.global().time_profiler_chan().clone())
                 .expect("Error initializing channel");
@@ -1925,7 +1931,7 @@ impl HTMLInputElement {
                     if paths.is_empty() {
                         return;
                     } else {
-                        Some(paths[0].to_string()) // neglect other paths
+                        Some(PathBuf::from(paths[0].to_string())) // neglect other paths
                     }
                 },
                 None => None,

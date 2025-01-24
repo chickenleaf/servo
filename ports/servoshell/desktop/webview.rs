@@ -6,6 +6,7 @@ use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Write;
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::Duration;
 use std::vec::Drain;
@@ -108,12 +109,12 @@ impl WebView {
     pub fn initialize_file_dialog(
         &mut self,
         multiple: bool,
-        response_sender: IpcSender<Option<Vec<String>>>,
+        response_sender: IpcSender<Option<Vec<PathBuf>>>,
     ) {
         let dialog = FileDialog {
             dialog: EguiFileDialog::new(),
             multiple,
-            response_sender: Some(response_sender),
+            response_sender,
         };
 
         self.dialogs.push(Dialog::File(dialog));
