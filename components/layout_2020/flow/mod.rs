@@ -389,7 +389,7 @@ impl BlockFormattingContext {
             content_inline_size_for_table: None,
             baselines: flow_layout.baselines,
             depends_on_block_constraints: flow_layout.depends_on_block_constraints,
-            detailed_layout_info: None,
+            specific_layout_info: None,
         }
     }
 
@@ -440,7 +440,6 @@ fn compute_inline_content_sizes_for_block_level_boxes(
                     &LogicalVec2::zero(),
                     false, /* auto_block_size_stretches_to_containing_block */
                     false, /* is_replaced */
-                    false, /* is_table */
                     !matches!(base.style.pseudo(), Some(PseudoElement::ServoAnonymousBox)),
                     |_| None, /* TODO: support preferred aspect ratios on non-replaced boxes */
                     |constraint_space| {
@@ -855,7 +854,6 @@ fn layout_in_flow_non_replaced_block_level_same_formatting_context(
         containing_block,
         &layout_style,
         get_inline_content_sizes,
-        false, /* is_table */
     );
     let ResolvedMargins {
         margin,
@@ -1098,7 +1096,6 @@ impl IndependentNonReplacedContents {
             containing_block,
             &layout_style,
             get_inline_content_sizes,
-            self.is_table(),
         );
 
         let layout = self.layout(
@@ -1160,7 +1157,7 @@ impl IndependentNonReplacedContents {
             block_margins_collapsed_with_children,
         )
         .with_baselines(layout.baselines)
-        .with_detailed_layout_info(layout.detailed_layout_info)
+        .with_specific_layout_info(layout.specific_layout_info)
     }
 
     /// Lay out a normal in flow non-replaced block that establishes an independent
@@ -1472,7 +1469,7 @@ impl IndependentNonReplacedContents {
             CollapsedBlockMargins::from_margin(&margin),
         )
         .with_baselines(layout.baselines)
-        .with_detailed_layout_info(layout.detailed_layout_info)
+        .with_specific_layout_info(layout.specific_layout_info)
     }
 }
 
@@ -1639,7 +1636,6 @@ fn solve_containing_block_padding_and_border_for_in_flow_box<'a>(
     containing_block: &ContainingBlock<'_>,
     layout_style: &'a LayoutStyle,
     get_inline_content_sizes: impl FnOnce(&ConstraintSpace) -> ContentSizes,
-    is_table: bool,
 ) -> ContainingBlockPaddingAndBorder<'a> {
     let style = layout_style.style();
     if matches!(style.pseudo(), Some(PseudoElement::ServoAnonymousBox)) {
@@ -1701,7 +1697,7 @@ fn solve_containing_block_padding_and_border_for_in_flow_box<'a>(
         ))
     };
     // TODO: the automatic inline size should take `justify-self` into account.
-    let automatic_inline_size = if is_table {
+    let automatic_inline_size = if layout_style.is_table() {
         Size::FitContent
     } else {
         Size::Stretch
@@ -1934,9 +1930,7 @@ impl<'container> PlacementState<'container> {
         // > When finding the first/last baseline set of an inline-block, any baselines
         // > contributed by table boxes must be skipped. (This quirk is a legacy behavior from
         // > [CSS2].)
-        let display = box_fragment.style.clone_display();
-        let is_table = display == Display::Table;
-        if self.is_inline_block_context && is_table {
+        if self.is_inline_block_context && box_fragment.is_table_wrapper() {
             return;
         }
 

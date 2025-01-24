@@ -11,6 +11,10 @@ on:
         required: false
         default: false
         type: boolean
+      build-libservo:
+        required: false
+        default: false
+        type: boolean
       upload:
         required: false
         default: false
@@ -22,6 +26,10 @@ on:
         required: false
         type: boolean
         default: false
+      bencher:
+        required: false
+        default: false
+        type: boolean
   workflow_dispatch:
     inputs:
       profile:
@@ -33,6 +41,10 @@ on:
         required: false
         default: false
         type: boolean
+      build-libservo:
+        required: false
+        default: false
+        type: boolean
       upload:
         required: false
         default: false
@@ -41,6 +53,10 @@ on:
         required: false
         type: boolean
         default: false
+      bencher:
+        required: false
+        default: false
+        type: boolean
 
 env:
   RUST_BACKTRACE: 1
@@ -160,10 +176,14 @@ jobs:
           timeout_minutes: 30
           max_attempts: 3 # https://github.com/servo/servo/issues/30683
           command: .\mach test-unit --${{ inputs.profile }} -- -- --test-threads=1
+      - name: Build libservo with examples
+        if: ${{ inputs.build-libservo }}
+        continue-on-error: true
+        run: cargo build -p libservo --all-targets
       - name: Archive build timing
         uses: actions/upload-artifact@v4
         with:
-          name: cargo-timings-windows
+          name: cargo-timings-windows-${{ inputs.profile }}
           # Using a wildcard here ensures that the archive includes the path.
           path: C:\\a\\servo\\servo\\target\\cargo-timings-*
       - name: Build mach package
@@ -171,7 +191,7 @@ jobs:
       - name: Upload artifact for mach package
         uses: actions/upload-artifact@v4
         with:
-          name: win
+          name: ${{ inputs.profile }}-binary-windows
           # These files are available
           # MSI Installer: C:\a\servo\servo\target\${{ inputs.profile }}\msi\Installer.msi
           # Bundle: C:\a\servo\servo\target\${{ inputs.profile }}\msi\Servo.exe
@@ -186,3 +206,16 @@ jobs:
           S3_UPLOAD_CREDENTIALS: ${{ secrets.S3_UPLOAD_CREDENTIALS }}
           NIGHTLY_REPO_TOKEN: ${{ secrets.NIGHTLY_REPO_TOKEN }}
           NIGHTLY_REPO: ${{ github.repository_owner }}/servo-nightly-builds
+  bencher:
+    needs: ["build"]
+    if: ${{ inputs.bencher && inputs.profile != 'debug' && github.event_name != 'workflow_dispatch' && github.event_name != 'merge_group' }}
+    uses: ./.github/workflows/bencher.yml
+    with:
+      target: 'windows'
+      profile: ${{ inputs.profile }}
+      compressed-file-path: ''
+      binary-path: ${{ inputs.profile }}-binary-windows/Servo.exe
+      file-size: true
+      speedometer: false
+      dromaeo: false
+    secrets: inherit

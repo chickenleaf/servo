@@ -136,6 +136,13 @@ pub struct Preferences {
     pub dom_worklet_blockingsleep: bool,
     pub dom_worklet_testing_enabled: bool,
     pub dom_worklet_timeout_ms: i64,
+    /// True to compile all WebRender shaders when Servo initializes. This is mostly
+    /// useful when modifying the shaders, to ensure they all compile after each change is
+    /// made.
+    pub gfx_precache_shaders: bool,
+    /// Whether or not antialiasing is enabled for text rendering.
+    pub gfx_text_antialiasing_enabled: bool,
+    /// Whether or not subpixel antialiasing is enabled for text rendering.
     pub gfx_subpixel_text_antialiasing_enabled: bool,
     pub gfx_texture_swizzling_enabled: bool,
     pub js_asmjs_enabled: bool,
@@ -202,12 +209,6 @@ pub struct Preferences {
     pub network_http_cache_disabled: bool,
     pub network_local_directory_listing_enabled: bool,
     pub network_mime_sniff: bool,
-    /// Ignore `std::io::Error` with `ErrorKind::UnexpectedEof` received when a TLS connection
-    /// is closed without a close_notify.
-    ///
-    /// Used for tests because WPT server doesn't properly close the TLS connection.
-    // TODO: remove this when WPT server is updated to use a proper TLS implementation.
-    pub network_tls_ignore_unexpected_eof: bool,
     pub session_history_max_length: i64,
     /// The background color of shell's viewport. This will be used by OpenGL's `glClearColor`.
     pub shell_background_color_rgba: [f64; 4],
@@ -305,6 +306,8 @@ impl Preferences {
             fonts_monospace: String::new(),
             fonts_sans_serif: String::new(),
             fonts_serif: String::new(),
+            gfx_precache_shaders: true,
+            gfx_text_antialiasing_enabled: true,
             gfx_subpixel_text_antialiasing_enabled: true,
             gfx_texture_swizzling_enabled: true,
             js_asmjs_enabled: true,
@@ -369,7 +372,6 @@ impl Preferences {
             network_http_cache_disabled: false,
             network_local_directory_listing_enabled: false,
             network_mime_sniff: false,
-            network_tls_ignore_unexpected_eof: false,
             session_history_max_length: 20,
             shell_background_color_rgba: [1.0, 1.0, 1.0, 1.0],
             threadpools_async_runtime_workers_max: 6,

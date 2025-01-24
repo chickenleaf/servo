@@ -240,7 +240,7 @@ pub(crate) enum IsHTMLDocument {
 }
 
 #[derive(JSTraceable, MallocSizeOf)]
-#[crown::unrooted_must_root_lint::must_root]
+#[cfg_attr(crown, crown::unrooted_must_root_lint::must_root)]
 enum FocusTransaction {
     /// No focus operation is in effect.
     NotInTransaction,
@@ -606,8 +606,15 @@ impl Document {
             ancestor.set_flag(NodeFlags::HAS_DIRTY_DESCENDANTS, has_dirty_descendants);
             has_dirty_descendants &= *ancestor != *new_dirty_root;
         }
-        self.dirty_root
-            .set(Some(new_dirty_root.downcast::<Element>().unwrap()));
+
+        let maybe_shadow_host = new_dirty_root
+            .downcast::<ShadowRoot>()
+            .map(ShadowRootMethods::Host);
+        let new_dirty_root_element = new_dirty_root
+            .downcast::<Element>()
+            .or(maybe_shadow_host.as_deref());
+
+        self.dirty_root.set(new_dirty_root_element);
     }
 
     pub(crate) fn take_dirty_root(&self) -> Option<DomRoot<Element>> {
@@ -676,7 +683,7 @@ impl Document {
 
         // Set the document's activity level, reflow if necessary, and suspend or resume timers.
         self.activity.set(activity);
-        let media = ServoMedia::get().unwrap();
+        let media = ServoMedia::get();
         let pipeline_id = self.window().pipeline_id();
         let client_context_id =
             ClientContextId::build(pipeline_id.namespace_id.0, pipeline_id.index.0.get());
@@ -1589,6 +1596,7 @@ impl Document {
         // Step 9
         event.set_trusted(trusted);
         // Step 10 Set event’s composed to true.
+        event.set_composed(true);
         // Step 11
         event.dispatch(target, false, can_gc);
     }
@@ -3152,7 +3160,7 @@ impl Document {
         self.webgpu_contexts.clone()
     }
 
-    #[allow(crown::unrooted_must_root)]
+    #[cfg_attr(crown, allow(crown::unrooted_must_root))]
     #[cfg(feature = "webgpu")]
     pub(crate) fn update_rendering_of_webgpu_canvases(&self) {
         self.webgpu_contexts
@@ -4178,7 +4186,7 @@ impl Document {
 
     /// Add a stylesheet owned by `owner` to the list of document sheets, in the
     /// correct tree position.
-    #[allow(crown::unrooted_must_root)] // Owner needs to be rooted already necessarily.
+    #[cfg_attr(crown, allow(crown::unrooted_must_root))] // Owner needs to be rooted already necessarily.
     pub(crate) fn add_stylesheet(&self, owner: &Element, sheet: Arc<Stylesheet>) {
         let stylesheets = &mut *self.stylesheets.borrow_mut();
         let insertion_point = stylesheets
@@ -4215,7 +4223,7 @@ impl Document {
     }
 
     /// Remove a stylesheet owned by `owner` from the list of document sheets.
-    #[allow(crown::unrooted_must_root)] // Owner needs to be rooted already necessarily.
+    #[cfg_attr(crown, allow(crown::unrooted_must_root))] // Owner needs to be rooted already necessarily.
     pub(crate) fn remove_stylesheet(&self, owner: &Element, stylesheet: &Arc<Stylesheet>) {
         let cloned_stylesheet = stylesheet.clone();
         self.window
@@ -4241,7 +4249,7 @@ impl Document {
         })
     }
 
-    #[allow(crown::unrooted_must_root)]
+    #[cfg_attr(crown, allow(crown::unrooted_must_root))]
     pub(crate) fn drain_pending_restyles(&self) -> Vec<(TrustedNodeAddress, PendingRestyle)> {
         self.pending_restyles
             .borrow_mut()
@@ -5878,7 +5886,7 @@ impl AnimationFrameCallback {
 }
 
 #[derive(Default, JSTraceable, MallocSizeOf)]
-#[crown::unrooted_must_root_lint::must_root]
+#[cfg_attr(crown, crown::unrooted_must_root_lint::must_root)]
 struct PendingInOrderScriptVec {
     scripts: DomRefCell<VecDeque<PendingScript>>,
 }
@@ -5916,7 +5924,7 @@ impl PendingInOrderScriptVec {
 }
 
 #[derive(JSTraceable, MallocSizeOf)]
-#[crown::unrooted_must_root_lint::must_root]
+#[cfg_attr(crown, crown::unrooted_must_root_lint::must_root)]
 struct PendingScript {
     element: Dom<HTMLScriptElement>,
     // TODO(sagudev): could this be all no_trace?

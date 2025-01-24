@@ -18,6 +18,10 @@ on:
         required: false
         default: false
         type: boolean
+      build-libservo:
+        required: false
+        default: false
+        type: boolean
       upload:
         required: false
         default: false
@@ -26,9 +30,13 @@ on:
         required: false
         type: string
       force-github-hosted-runner:
+          required: false
+          type: boolean
+          default: false
+      bencher:
         required: false
-        type: boolean
         default: false
+        type: boolean
   workflow_dispatch:
     inputs:
       profile:
@@ -48,14 +56,22 @@ on:
         required: false
         default: false
         type: boolean
+      build-libservo:
+        required: false
+        default: false
+        type: boolean
       upload:
         required: false
         default: false
         type: boolean
       force-github-hosted-runner:
+          required: false
+          type: boolean
+          default: false
+      bencher:
         required: false
-        type: boolean
         default: false
+        type: boolean
 
 env:
   RUST_BACKTRACE: 1
@@ -144,6 +160,10 @@ jobs:
           timeout_minutes: 40 # https://github.com/servo/servo/issues/30275
           max_attempts: 3 # https://github.com/servo/servo/issues/30683
           command: ./mach test-unit --${{ inputs.profile }}
+      - name: Build libservo with examples
+        if: ${{ inputs.build-libservo }}
+        continue-on-error: true
+        run: cargo build -p libservo --all-targets
       - name: Build mach package
         run: ./mach package --${{ inputs.profile }}
       - name: Run DMG smoketest
@@ -155,13 +175,13 @@ jobs:
       - name: Archive build timing
         uses: actions/upload-artifact@v4
         with:
-          name: cargo-timings-macos
+          name: cargo-timings-macos-${{ inputs.profile }}
           # Using a wildcard here ensures that the archive includes the path.
           path: target/cargo-timings-*
       - name: Upload artifact for mach package
         uses: actions/upload-artifact@v4
         with:
-          name: mac
+          name: ${{ inputs.profile }}-binary-mac
           path: target/${{ inputs.profile }}/servo-tech-demo.dmg
       - name: Upload nightly
         if: ${{ inputs.upload }}
@@ -201,4 +221,18 @@ jobs:
       profile: ${{ inputs.profile }}
       wpt-layout: "layout-2013"
       wpt-args: ${{ inputs.wpt-args }}
+    secrets: inherit
+
+  bencher:
+    needs: ["build"]
+    if: ${{ inputs.bencher && inputs.profile != 'debug' && github.event_name != 'workflow_dispatch' && github.event_name != 'merge_group' }}
+    uses: ./.github/workflows/bencher.yml
+    with:
+      target: 'macos'
+      profile: ${{ inputs.profile }}
+      compressed-file-path: ${{ inputs.profile }}-binary-macos/target.tar.gz
+      binary-path: target/${{ inputs.profile }}/servo
+      file-size: true
+      speedometer: false
+      dromaeo: false
     secrets: inherit

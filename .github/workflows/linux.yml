@@ -21,6 +21,10 @@ on:
         required: false
         default: false
         type: boolean
+      build-libservo:
+        required: false
+        default: false
+        type: boolean
       upload:
         required: false
         default: false
@@ -56,6 +60,10 @@ on:
         type: choice
         options: ["none", "2013", "2020", "all"]
       unit-tests:
+        required: false
+        default: false
+        type: boolean
+      build-libservo:
         required: false
         default: false
         type: boolean
@@ -165,10 +173,14 @@ jobs:
           timeout_minutes: 20
           max_attempts: 2 # https://github.com/servo/servo/issues/30683
           command: ./mach test-unit --${{ inputs.profile }}
+      - name: Build libservo with examples
+        if: ${{ inputs.build-libservo }}
+        continue-on-error: true
+        run: cargo build -p libservo --all-targets
       - name: Archive build timing
         uses: actions/upload-artifact@v4
         with:
-          name: cargo-timings-linux
+          name: cargo-timings-linux-${{ inputs.profile }}
           # Using a wildcard here ensures that the archive includes the path.
           path: target/cargo-timings-*
       - name: Build mach package
@@ -176,7 +188,7 @@ jobs:
       - name: Upload artifact for mach package
         uses: actions/upload-artifact@v4
         with:
-          name: linux
+          name: linux-${{ inputs.profile }}
           path: target/${{ inputs.profile }}/servo-tech-demo.tar.gz
       - name: Upload nightly
         if: ${{ inputs.upload }}
@@ -222,7 +234,15 @@ jobs:
 
   bencher:
     needs: ["build"]
-    # benches must be release (we will do benches for production profile in servo/servo-nightly-builds)
-    if: ${{ inputs.bencher && inputs.profile == 'release' && github.event_name != 'workflow_dispatch' && github.event_name != 'merge_group' }}
-    uses: ./.github/workflows/linux-bencher.yml
+    if: ${{ inputs.bencher && inputs.profile != 'debug' && github.event_name != 'workflow_dispatch' && github.event_name != 'merge_group' }}
+    uses: ./.github/workflows/bencher.yml
+    with:
+      target: 'linux'
+      profile: ${{ inputs.profile }}
+      compressed-file-path: ${{ inputs.profile }}-binary-linux/target.tar.gz
+      binary-path: target/${{ inputs.profile }}/servo
+      file-size: true
+      # We only evaluate speedometer and dromaeo score in release
+      speedometer: ${{ inputs.profile == 'release' }}
+      dromaeo: ${{ inputs.profile == 'release' }}
     secrets: inherit

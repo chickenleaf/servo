@@ -87,7 +87,7 @@ pub(crate) struct IndependentLayout {
     pub depends_on_block_constraints: bool,
 
     /// Additional information of this layout that could be used by Javascripts and devtools.
-    pub detailed_layout_info: Option<SpecificLayoutInfo>,
+    pub specific_layout_info: Option<SpecificLayoutInfo>,
 }
 
 pub(crate) struct IndependentLayoutResult {
@@ -186,14 +186,6 @@ impl IndependentFormattingContext {
         self.base.base_fragment_info
     }
 
-    #[inline]
-    pub(crate) fn is_table(&self) -> bool {
-        match &self.contents {
-            IndependentFormattingContextContents::NonReplaced(content) => content.is_table(),
-            IndependentFormattingContextContents::Replaced(_) => false,
-        }
-    }
-
     pub(crate) fn inline_content_sizes(
         &self,
         layout_context: &LayoutContext,
@@ -222,7 +214,6 @@ impl IndependentFormattingContext {
             auto_minimum,
             auto_block_size_stretches_to_containing_block,
             self.is_replaced(),
-            self.is_table(),
             true, /* establishes_containing_block */
             |padding_border_sums| self.preferred_aspect_ratio(padding_border_sums),
             |constraint_space| self.inline_content_sizes(layout_context, constraint_space),
@@ -297,7 +288,7 @@ impl IndependentNonReplacedContents {
             IndependentNonReplacedContents::Flow(fc) => fc.layout_style(base),
             IndependentNonReplacedContents::Flex(fc) => fc.layout_style(),
             IndependentNonReplacedContents::Grid(fc) => fc.layout_style(),
-            IndependentNonReplacedContents::Table(fc) => fc.layout_style(),
+            IndependentNonReplacedContents::Table(fc) => fc.layout_style(None),
         }
     }
 

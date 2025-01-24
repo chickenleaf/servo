@@ -6,6 +6,7 @@ use app_units::Au;
 use atomic_refcell::AtomicRefCell;
 use base::print_tree::PrintTree;
 use servo_arc::Arc as ServoArc;
+use style::computed_values::border_collapse::T as BorderCollapse;
 use style::computed_values::overflow_x::T as ComputedOverflow;
 use style::computed_values::position::T as ComputedPosition;
 use style::logical_geometry::WritingMode;
@@ -19,7 +20,7 @@ use crate::geom::{
     AuOrAuto, LengthPercentageOrAuto, PhysicalPoint, PhysicalRect, PhysicalSides, ToLogical,
 };
 use crate::style_ext::ComputedValuesExt;
-use crate::table::SpecificTableOrTableCellInfo;
+use crate::table::SpecificTableGridInfo;
 use crate::taffy::SpecificTaffyGridInfo;
 
 /// Describes how a [`BoxFragment`] paints its background.
@@ -43,7 +44,9 @@ pub(crate) struct ExtraBackground {
 #[derive(Clone, Debug)]
 pub(crate) enum SpecificLayoutInfo {
     Grid(Box<SpecificTaffyGridInfo>),
-    TableOrTableCell(Box<SpecificTableOrTableCellInfo>),
+    TableCellWithCollapsedBorders,
+    TableGridWithCollapsedBorders(Box<SpecificTableGridInfo>),
+    TableWrapper,
 }
 
 pub(crate) struct BoxFragment {
@@ -86,7 +89,7 @@ pub(crate) struct BoxFragment {
     pub background_mode: BackgroundMode,
 
     /// Additional information of from layout that could be used by Javascripts and devtools.
-    pub detailed_layout_info: Option<SpecificLayoutInfo>,
+    pub specific_layout_info: Option<SpecificLayoutInfo>,
 }
 
 impl BoxFragment {
@@ -121,7 +124,7 @@ impl BoxFragment {
             scrollable_overflow_from_children,
             resolved_sticky_insets: AtomicRefCell::default(),
             background_mode: BackgroundMode::Normal,
-            detailed_layout_info: None,
+            specific_layout_info: None,
         }
     }
 
@@ -174,8 +177,8 @@ impl BoxFragment {
         self.background_mode = BackgroundMode::None;
     }
 
-    pub fn with_detailed_layout_info(mut self, info: Option<SpecificLayoutInfo>) -> Self {
-        self.detailed_layout_info = info;
+    pub fn with_specific_layout_info(mut self, info: Option<SpecificLayoutInfo>) -> Self {
+        self.specific_layout_info = info;
         self
     }
 
@@ -345,5 +348,25 @@ impl BoxFragment {
     pub(crate) fn is_inline_box(&self) -> bool {
         self.style.get_box().display.is_inline_flow() &&
             !self.base.flags.contains(FragmentFlags::IS_REPLACED)
+    }
+
+    /// Whether this is a table wrapper box.
+    /// <https://www.w3.org/TR/css-tables-3/#table-wrapper-box>
+    pub(crate) fn is_table_wrapper(&self) -> bool {
+        matches!(
+            self.specific_layout_info,
+            Some(SpecificLayoutInfo::TableWrapper)
+        )
+    }
+
+    pub(crate) fn has_collapsed_borders(&self) -> bool {
+        match &self.specific_layout_info {
+            Some(SpecificLayoutInfo::TableCellWithCollapsedBorders) => true,
+            Some(SpecificLayoutInfo::TableGridWithCollapsedBorders(_)) => true,
+            Some(SpecificLayoutInfo::TableWrapper) => {
+                self.style.get_inherited_table().border_collapse == BorderCollapse::Collapse
+            },
+            _ => false,
+        }
     }
 }
