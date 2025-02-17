@@ -109,6 +109,9 @@ impl RunningAppState {
     pub(crate) fn new_toplevel_webview(self: &Rc<Self>, url: Url) {
         let webview = self.servo().new_webview(url);
         webview.set_delegate(self.clone());
+        if self.inner_mut().focused_webview_id.is_none() {
+            self.inner_mut().focused_webview_id = Some(webview.id());
+        }
         self.add(webview);
     }
 
@@ -381,19 +384,11 @@ impl WebViewDelegate for RunningAppState {
 
     fn request_authentication(
         &self,
-        _webview: WebView,
+        webview: WebView,
         authentication_request: AuthenticationRequest,
     ) {
-        if self.inner().headless {
-            return;
-        }
-
-        if let (Some(username), Some(password)) = (
-            tinyfiledialogs::input_box("", "username", ""),
-            tinyfiledialogs::input_box("", "password", ""),
-        ) {
-            authentication_request.authenticate(username, password);
-        }
+        let authentication_dialog = Dialog::new_authentication_dialog(authentication_request);
+        self.add_dialog(webview, authentication_dialog);
     }
 
     fn request_open_auxiliary_webview(
